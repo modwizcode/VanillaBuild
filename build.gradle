@@ -1,0 +1,31 @@
+plugins {
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '1.2.1'
+}
+
+defaultTasks "shadowJar"
+
+group 'com.modwiz.sponge'
+version '1.0-SNAPSHOT'
+
+jar {
+    manifest {
+        attributes("Main-Class": "VanillaBuildMain")
+    }
+}
+
+sourceCompatibility = 1.7
+
+repositories {
+    mavenCentral()
+    maven {
+        url "https://repo.eclipse.org/content/repositories/jgit-releases"
+    }
+}
+
+dependencies {
+    compile 'org.slf4j:slf4j-simple:1.7.12'
+    compile 'org.fusesource.jansi:jansi:1.11'
+    compile group: 'org.eclipse.jgit', name: 'org.eclipse.jgit', version: '4.0.0.201505260635-rc2'
+    testCompile group: 'junit', name: 'junit', version: '4.11'
+}
