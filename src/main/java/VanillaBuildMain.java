@@ -1,5 +1,6 @@
 import org.eclipse.jgit.api.CloneCommand;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.MergeCommand.FastForwardMode;
 import org.eclipse.jgit.api.ResetCommand;
 import org.eclipse.jgit.api.SubmoduleInitCommand;
 import org.eclipse.jgit.api.SubmoduleUpdateCommand;
@@ -156,15 +157,16 @@ public class VanillaBuildMain {
             Git git = Git.open(new File(ROOT_DIR));
             git.reset().setMode(ResetCommand.ResetType.HARD).call();
             git.fetch().setProgressMonitor(new TextProgressMonitor(new PrintWriter(System.out))).call();
-            
-            updateSubmodules(git.getRepository(), true);
-            
+                        
             if (cloneCommit == TargetCommit.CUSTOM) {
                 git.checkout().setName(customCommit).call();
             } else {
                 git.checkout().setName("master").call();
+                git.merge().setFastForward(FastForwardMode.FF_ONLY).include(git.getRepository().getRef("origin/master")).call();
             }
             
+            updateSubmodules(git.getRepository(), true);
+
             return true;
         } catch (IOException e) {
             e.printStackTrace();
