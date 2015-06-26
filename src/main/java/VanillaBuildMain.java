@@ -1,9 +1,16 @@
 import org.eclipse.jgit.api.CloneCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ResetCommand;
+import org.eclipse.jgit.api.SubmoduleInitCommand;
+import org.eclipse.jgit.api.SubmoduleUpdateCommand;
 import org.eclipse.jgit.api.errors.CheckoutConflictException;
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.api.errors.InvalidRemoteException;
+import org.eclipse.jgit.api.errors.TransportException;
+import org.eclipse.jgit.lib.ProgressMonitor;
+import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.TextProgressMonitor;
+import org.eclipse.jgit.submodule.SubmoduleWalk;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,7 +74,6 @@ public class VanillaBuildMain {
                     logger.error("No commit specified aborting build.");
                     return;
                 }
-                logger.info("Attempting to clone SpongeVanilla at specific commit: ");
             }
         }
         
@@ -102,12 +108,12 @@ public class VanillaBuildMain {
         }
         
         
-        switch (cloneCommit) {
-            case MASTER:
+        switch (workspace) {
+            case CI:
                 logger.info("Setting up CI workspace");
                 setupWorkspace(false);
                 break;
-            case CUSTOM:
+            case DECOMP:
                 logger.info("Setting up decompiled workspace");
                 setupWorkspace(true);
                 break;
@@ -133,6 +139,9 @@ public class VanillaBuildMain {
             
             if (cloneCommit == TargetCommit.CUSTOM) {
                 git.checkout().setName(customCommit).call();
+                
+                git.submoduleInit().call();
+                git.submoduleUpdate().setProgressMonitor(new TextProgressMonitor(new PrintWriter(System.out))).call();
             }
             
             return true;
@@ -146,14 +155,16 @@ public class VanillaBuildMain {
         try {
             Git git = Git.open(new File(ROOT_DIR));
             git.reset().setMode(ResetCommand.ResetType.HARD).call();
-            git.pull().setProgressMonitor(new TextProgressMonitor(new PrintWriter(System.out))).call();
+            git.fetch().setProgressMonitor(new TextProgressMonitor(new PrintWriter(System.out))).call();
+            
+            updateSubmodules(git.getRepository(), true);
             
             if (cloneCommit == TargetCommit.CUSTOM) {
                 git.checkout().setName(customCommit).call();
+            } else {
+                git.checkout().setName("master").call();
             }
             
-            git.submoduleInit().call();
-            git.submoduleUpdate().call();
             return true;
         } catch (IOException e) {
             e.printStackTrace();
@@ -179,6 +190,37 @@ public class VanillaBuildMain {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
+    }
+   
+    private static boolean updateSubmodules(Repository baseRepo, boolean isBase) {
+        ProgressMonitor console = new TextProgressMonitor(new PrintWriter(System.out));
+        try {
+            Git.wrap(baseRepo).submoduleInit().call();
+            if (!Git.wrap(baseRepo).submoduleUpdate().setProgressMonitor(console).call().isEmpty()) {
+                SubmoduleWalk walk = SubmoduleWalk.forIndex(baseRepo);
+                while (walk.next()) {
+                    Repository subRepo = walk.getRepository();
+                    if (subRepo != null) {
+                        return updateSubmodules(subRepo, false);
+                    }
+                }
+                walk.close();
+            }
+            
+            if (!isBase) {
+                baseRepo.close();
+            }
+            return true;
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (InvalidRemoteException e) {
+            e.printStackTrace();
+        } catch (TransportException e) {
+            e.printStackTrace();
+        } catch (GitAPIException e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     private static void buildJar() {
