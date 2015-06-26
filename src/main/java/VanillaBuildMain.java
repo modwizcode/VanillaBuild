@@ -22,7 +22,7 @@ public class VanillaBuildMain {
     private static final boolean IS_WINDOWS = System.getProperty("os.name").contains("windows") ||
             System.getProperty("os.name").contains("Windows");
 
-    private static final String GRADLEW_COMMAND = new File(ROOT_DIR, "gradlew." + (IS_WINDOWS ? "bat" : "")).getAbsolutePath();
+    private static final String GRADLEW_COMMAND = new File(ROOT_DIR, "gradlew" + (IS_WINDOWS ? ".bat" : "")).getAbsolutePath();
 
     private static final String[] SETUP_DECOMPWORKSPACE = new String[]{
             GRADLEW_COMMAND,
