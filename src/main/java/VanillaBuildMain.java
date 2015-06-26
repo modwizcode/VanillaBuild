@@ -7,6 +7,10 @@ import org.eclipse.jgit.lib.TextProgressMonitor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import arguments.ArgumentIterator;
+import arguments.TargetCommit;
+import arguments.WorkspaceType;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -43,27 +47,70 @@ public class VanillaBuildMain {
     };
 
     public static void main(String[] args) {
+        // TODO: Clean this up
+        ArgumentIterator argIterator = new ArgumentIterator(args);
+
+        TargetCommit cloneCommit = TargetCommit.MASTER;
+        WorkspaceType workspace = WorkspaceType.CI;
+        
+        String customCommit = null;
+        
+        while (argIterator.hasNext()) {
+            String arg = argIterator.next();
+            if (arg.equalsIgnoreCase("--decomp")) {
+                workspace = WorkspaceType.DECOMP;
+            } else if (arg.equalsIgnoreCase("--commit")) {
+                if (argIterator.hasNext()) {
+                    cloneCommit = TargetCommit.CUSTOM;
+                    customCommit = argIterator.next();
+                } else {
+                    logger.error("No commit specified aborting build.");
+                    return;
+                }
+                logger.info("Attempting to clone SpongeVanilla at specific commit: ");
+            }
+        }
+        
         if (!Files.exists(Paths.get("SpongeVanilla"))) {
             logger.info("SpongeVanilla repository not found, cloning now.");
-            if (!cloneRepo()) {
+            
+            if (!cloneRepo(cloneCommit, customCommit)) {
                 logger.error("An error occurred while cloning the repository. Exiting.");
                 return;
             }
         } else {
-            logger.info("Checking for updates to existing SpongeVanilla repository.");
-            if (!updateRepo()) {
-                logger.error("An error occurred while updating the repository. Exiting.");
+            switch (cloneCommit) {
+                case MASTER:
+                    logger.info("Checking for updates to existing SpongeVanilla repository.");
+                    break;
+                case CUSTOM:
+                    logger.info("Checking out custom commit " + customCommit + ".");
+                    break;
+            }
+            
+            if (!updateRepo(cloneCommit, customCommit)) {
+                switch (cloneCommit) {
+                    case MASTER:
+                        logger.error("An error occurred while updating the repository. Exiting.");
+                        break;
+                    case CUSTOM:
+                        logger.error("An error occurred while updating the repository to the specified commit. Exiting.");
+                        break;
+                }
                 return;
             }
         }
-
-        // HACK: Add proper argument parsing
-        if (args.length < 1 || !args[0].equalsIgnoreCase("--decomp")) {
-            logger.info("Setting up CI workspace");
-            setupWorkspace(false);
-        } else {
-            logger.info("Setting up decompiled workspace");
-            setupWorkspace(true);
+        
+        
+        switch (cloneCommit) {
+            case MASTER:
+                logger.info("Setting up CI workspace");
+                setupWorkspace(false);
+                break;
+            case CUSTOM:
+                logger.info("Setting up decompiled workspace");
+                setupWorkspace(true);
+                break;
         }
 
         logger.info("Building SpongeVanilla");
@@ -73,7 +120,7 @@ public class VanillaBuildMain {
         logger.info("The jar file to run is the file without javadoc, release or sources in the filename.");
     }
 
-    private static boolean cloneRepo() {
+    private static boolean cloneRepo(TargetCommit cloneCommit, String customCommit) {
         CloneCommand cloneCommand = new CloneCommand()
                 .setProgressMonitor(new TextProgressMonitor(new PrintWriter(System.out)))
                 .setDirectory(new File(ROOT_DIR))
@@ -83,6 +130,11 @@ public class VanillaBuildMain {
                 .setCloneSubmodules(true);
         try {
             Git git = cloneCommand.call();
+            
+            if (cloneCommit == TargetCommit.CUSTOM) {
+                git.checkout().setName(customCommit).call();
+            }
+            
             return true;
         } catch (GitAPIException e) {
             e.printStackTrace();
@@ -90,11 +142,16 @@ public class VanillaBuildMain {
         return false;
     }
 
-    private static boolean updateRepo() {
+    private static boolean updateRepo(TargetCommit cloneCommit, String customCommit) {
         try {
             Git git = Git.open(new File(ROOT_DIR));
             git.reset().setMode(ResetCommand.ResetType.HARD).call();
             git.pull().setProgressMonitor(new TextProgressMonitor(new PrintWriter(System.out))).call();
+            
+            if (cloneCommit == TargetCommit.CUSTOM) {
+                git.checkout().setName(customCommit).call();
+            }
+            
             git.submoduleInit().call();
             git.submoduleUpdate().call();
             return true;

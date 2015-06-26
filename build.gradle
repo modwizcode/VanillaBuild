@@ -6,7 +6,7 @@ plugins {
 defaultTasks "shadowJar"
 
 group 'com.modwiz.sponge'
-version '1.1.1'
+version '1.2-SNAPSHOT'
 
 jar {
     manifest {
